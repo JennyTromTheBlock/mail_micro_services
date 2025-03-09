@@ -1,0 +1,36 @@
+version: "3.8"
+
+services:
+  rabbitmq:
+    image: rabbitmq:3-management
+    container_name: rabbitmq
+    ports:
+      - "5672:5672"  # RabbitMQ messaging
+      - "15672:15672" # Web UI
+    networks:
+      - enron_network
+
+  cleaner:
+    build: ./cleaner
+    container_name: cleaner
+    environment:
+      - RABBITMQ_HOST=rabbitmq
+    depends_on:
+      - rabbitmq
+    ports:
+      - "8000:8000"  # Exponer API’en på port 8000
+    networks:
+      - enron_network
+    volumes:
+      - ./maildir:/app/maildir  # Binder den eksterne emails-mappe til containerens /app/emails
+
+  indexer:
+    build: ./indexer
+    container_name: indexer
+    depends_on:
+      - rabbitmq
+    networks:
+      - enron_network
+
+networks:
+  enron_network:
