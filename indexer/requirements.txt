@@ -2,3 +2,6 @@ fastapi
 uvicorn
 pika
 python-dotenv
+sqlalchemy
+sqlmodel
+aiomysql

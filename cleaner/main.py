@@ -1,123 +1,97 @@
 import os
-from typing import List
 
 import pika
 import json
+import re
+import threading
+from fastapi import FastAPI
 
-from dotenv import load_dotenv
-from fastapi import FastAPI, BackgroundTasks, HTTPException
-
-EMAIL_DIR = "./maildir"
-
-def scan_and_send(rabbitmq_host: str):
-    """ Scanner en mappe for emails og sender dem til RabbitMQ """
-    connection = pika.BlockingConnection(pika.ConnectionParameters(host=rabbitmq_host))
-    channel = connection.channel()
-    channel.queue_declare(queue="email_queue", durable=True)
-
-    for filename in os.listdir(EMAIL_DIR):
-        file_path = os.path.join(EMAIL_DIR, filename)
-
-        if filename.endswith(".txt"):
-            with open(file_path, "r", encoding="utf-8") as file:
-                email_content = file.read()
-
-            email_data = {
-                "email_id": filename,
-                "body": email_content,
-            }
-
-            channel.basic_publish(
-                exchange="",
-                routing_key="email_queue",
-                body=json.dumps(email_data),
-                properties=pika.BasicProperties(delivery_mode=2),
-            )
-            print(f"Sent to queue: {filename}")
-
-    connection.close()
-
-
-load_dotenv()  # Indlæs konfigurationsvariabler fra .env
+# Konfiguration
+RABBITMQ_HOST = "rabbitmq"
+RABBITMQ_QUEUE = "file_paths"
+RABBITMQ_CLEANED_QUEUE = "cleaned_file"  # Ny kø til de rensede filer
 
 app = FastAPI()
 
-RABBITMQ_HOST = os.getenv("RABBITMQ_HOST", "rabbitmq")
+# Global RabbitMQ forbindelse og kanal
+rabbitmq_channel = None
 
-@app.get("/")
-def read_root():
-    return {"message": "Cleaner Service is running!"}
-
-@app.post("/scan-emails")
-def scan_emails(background_tasks: BackgroundTasks):
-    """ Trigger scanning af emails i en baggrundsopgave """
-    background_tasks.add_task(scan_and_send, RABBITMQ_HOST)
-    return {"message": "Scanning started in the background"}
-
-
-# Funktion til at liste alle mapper i maildir
-def list_folders_in_maildir():
-    folders = []
-    # Iterere gennem mapperne i maildir
-    for folder in os.listdir(EMAIL_DIR):
-        folder_path = os.path.join(EMAIL_DIR, folder)
-
-        # Hvis det er en mappe, tilføj den til listen
-        if os.path.isdir(folder_path):
-            folders.append(folder)
-
-    # Hvis der ikke er nogen mapper, kast en HTTPException
-    if not folders:
-        raise HTTPException(status_code=404, detail="Ingen mapper fundet i maildir")
-
-    return folders
+# Opret og gem RabbitMQ-forbindelsen og kanalen
+def get_rabbitmq_connection():
+    global rabbitmq_channel
+    if rabbitmq_channel is None:
+        # Opret forbindelse og kanal én gang
+        connection = pika.BlockingConnection(pika.ConnectionParameters(host=RABBITMQ_HOST))
+        rabbitmq_channel = connection.channel()
+        rabbitmq_channel.queue_declare(queue=RABBITMQ_QUEUE)
+        rabbitmq_channel.queue_declare(queue=RABBITMQ_CLEANED_QUEUE)  # Sørg for at den nye kø eksisterer
+        print("RabbitMQ forbindelse oprettet og kanal oprettet.")
+    return rabbitmq_channel
 
 
-# FastAPI endpoint for at liste mapper i maildir
-@app.get("/list_folders", response_model=List[str])
-async def list_folders():
-    try:
-        folders = list_folders_in_maildir()
-        return {"folders": folders}
-    except HTTPException as e:
-        raise e
+def clean_email_header(file_path):
+    """
+    Åbner en e-mailfil, fjerner alle header-linjer (alt før den første tomme linje),
+    og returnerer indholdet af e-mailen uden headers.
+
+    :param file_path: Stien til e-mail filen
+    :return: E-mailens indhold uden headers
+    """
+    with open(file_path, 'r', encoding='utf-8') as file:
+        # Læs filens indhold
+        email_content = file.read()
+
+    # Brug regulær udtryk til at fjerne alt før den første tomme linje (hele headeren)
+    cleaned_email = re.sub(r'^(.*?)(\r?\n\r?\n)', '', email_content, flags=re.DOTALL)
+
+    # Returner den rensede e-mail uden headers
+    return cleaned_email
 
 
-# Funktion til at finde den første fil i '_sent_mail' mappen og læse dens indhold
-def get_first_file_content():
-    # Iterere gennem mapperne i maildir
-    for folder in os.listdir(EMAIL_DIR):
-        folder_path = os.path.join(EMAIL_DIR, folder)
+# Forbruger, der lytter på RabbitMQ og behandler nye beskeder
+def callback(ch, method, properties, body):
+    # Modtager path fra RabbitMQ
+    paths = json.loads(body)
 
-        # Hvis det ikke er en mappe, spring over den
-        if not os.path.isdir(folder_path):
-            raise HTTPException(status_code=404, detail="Mappe ikke fundet")
+    # Print paths modtaget
+    for path in paths:
+        print(f"Modtaget of cleaner filepath: {path}")
+        clean_email = clean_email_header(path)
 
-        # Kig efter '_sent_mail' mappen inde i den aktuelle mappe
-        sent_mail_path = os.path.join(folder_path, '_sent_mail')
+        # Hent filnavnet fra stien
+        file_name = os.path.basename(path)
 
-        if os.path.isdir(sent_mail_path):
-            # Hvis vi finder '_sent_mail' mappen, itererer vi over filerne
-            for file_name in os.listdir(sent_mail_path):
-                file_path = os.path.join(sent_mail_path, file_name)
+        # Opret en dictionary, der inkluderer både filnavn og den rensede e-mail
+        message = {
+            'file_name': file_name,
+            'cleaned_email': clean_email
+        }
 
-                # Hvis det ikke er en fil, spring over
-                if not os.path.isfile(file_path):
-                    raise HTTPException(status_code=404, detail=f"Ikke en fil: {file_path}")
-
-                # Læs indholdet af den første fil, der findes
-                with open(file_path, 'r', encoding='utf-8') as file:
-                    return file.read()  # Returner filens indhold
-
-    # Hvis ingen fil findes, kast en undtagelse
-    raise HTTPException(status_code=404, detail="Ingen fil fundet i _sent_mail mappen")
+        # Send kun den rensede version til den nye RabbitMQ-kø
+        ch.basic_publish(
+            exchange='',
+            routing_key=RABBITMQ_CLEANED_QUEUE,
+            body=json.dumps(message)  # Send kun den rensede e-mail (uden sti)
+        )
+    # Bekræft modtagelse af beskeden
+    ch.basic_ack(delivery_tag=method.delivery_tag)
 
 
-# FastAPI endpoint for at hente indholdet af den første fil i '_sent_mail'
-@app.get("/open_first_file")
-async def open_first_file():
-    try:
-        file_content = get_first_file_content()
-        return {"content": file_content}
-    except HTTPException as e:
-        raise e
+# Starter RabbitMQ lytteren
+def listen_for_paths():
+    channel = get_rabbitmq_connection()
+
+    # Lyt på køen og kald callback når beskeder modtages
+    channel.basic_consume(queue=RABBITMQ_QUEUE, on_message_callback=callback, auto_ack=False)
+
+    print("Lytter på RabbitMQ for nye paths...")
+    channel.start_consuming()
+
+
+@app.on_event("startup")
+def startup_event():
+    # Kald RabbitMQ-læseren i en baggrundstråd, så det ikke blokkerer FastAPI
+    print("Starter RabbitMQ consumer i baggrund...")
+    thread = threading.Thread(target=listen_for_paths)
+    thread.daemon = True  # Gør tråden til en daemon, så den afsluttes når serveren stopper
+    thread.start()

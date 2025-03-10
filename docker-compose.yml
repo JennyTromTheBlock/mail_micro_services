@@ -10,6 +10,23 @@ services:
     networks:
       - enron_network
 
+  collector:
+    build: ./collector
+    container_name: collector
+    depends_on:
+      - rabbitmq
+    volumes:
+      - ./maildir:/app/maildir  # Binder den eksterne emails-mappe til containerens /app/emails
+    environment:
+      - RABBITMQ_HOST=rabbitmq
+      - RABBITMQ_QUEUE=file_paths
+      - BATCH_SIZE=1000
+      - WATCH_DIRECTORY=/data
+    ports:
+      - "8000:8000"  # Exponer API’en på port 8001
+    networks:
+      - enron_network
+
   cleaner:
     build: ./cleaner
     container_name: cleaner
@@ -18,19 +35,45 @@ services:
     depends_on:
       - rabbitmq
     ports:
-      - "8000:8000"  # Exponer API’en på port 8000
+      - "8001:8001"  # Exponer API’en på port 8000
     networks:
       - enron_network
     volumes:
       - ./maildir:/app/maildir  # Binder den eksterne emails-mappe til containerens /app/emails
 
+
+  mariadb:
+    image: mariadb:latest
+    container_name: mariadb_container
+    restart: always
+    environment:
+      MYSQL_ROOT_PASSWORD: rootpassword
+      MYSQL_DATABASE: WordOccurrencesDB
+      MYSQL_USER: myuser
+      MYSQL_PASSWORD: mypassword
+    ports:
+      - "3300:3306"  # Binder port 3300 på værten til 3306 inde i containeren
+    networks:
+      - enron_network
+    volumes:
+      - mariadb_data:/var/lib/mysql
+      - ./indexer/init.sql:/docker-entrypoint-initdb.d/init.sql
+
   indexer:
     build: ./indexer
     container_name: indexer
     depends_on:
-      - rabbitmq
+      - mariadb  # Sørger for at mariadb containeren starter før indexer
     networks:
       - enron_network
+    ports:
+      - "8002:8000"  # Exponer API’en på port 8000
+    environment:
+      - DATABASE_URL=mysql+aiomysql://myuser:mypassword@mariadb_container:3306/WordOccurrencesDB
+      # Hvis du har brug for at tilføje flere miljøvariabler, gør det her
 
 networks:
   enron_network:
+
+volumes:
+  mariadb_data:
