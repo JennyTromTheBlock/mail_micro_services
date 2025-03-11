@@ -100,6 +100,7 @@ async def create_file_with_words(mail_name: str, mail_body: str):
             await session.rollback()
             raise HTTPException(status_code=500, detail=f"An error occurred: {str(e)}")
 
+
 def callback(ch, method, properties, body):
     """Handles messages from RabbitMQ"""
     print("✅ Done processing the cleaned email.")
@@ -113,6 +114,7 @@ def callback(ch, method, properties, body):
 
     ch.basic_ack(delivery_tag=method.delivery_tag)  # Acknowledge message
 
+
 @app.on_event("startup")
 def startup_event():
     # Start the RabbitMQ consumer in a background thread so it doesn't block FastAPI
@@ -120,6 +122,7 @@ def startup_event():
     thread = threading.Thread(target=listen_for_paths)
     thread.daemon = True  # Daemon thread will exit when the main program exits
     thread.start()
+
 
 def listen_for_paths():
     channel = get_rabbitmq_connection()
@@ -129,6 +132,7 @@ def listen_for_paths():
 
     print("Listening for RabbitMQ messages...")
     channel.start_consuming()
+
 
 # Create and store the RabbitMQ connection and channel
 def get_rabbitmq_connection():
