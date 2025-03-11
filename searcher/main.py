@@ -78,3 +78,30 @@ async def read_word_occurrences(word: str = Query(..., min_length=1)):
     async with SessionLocal() as session:
         occurrences = await get_word_occurrences(word, session)
         return occurrences
+
+
+
+
+# Pydantic-model til API-respons
+class FileResponse(SQLModel):
+    file_id: int
+    file_name: str
+    content: str  # Dekodet filindhold
+
+# Endpoint til at hente filen som en string
+@app.get("/file/{file_id}", response_model=FileResponse)
+async def get_file(file_id: int):
+    async with SessionLocal() as session:
+        result = await session.execute(select(File).where(File.file_id == file_id))
+        file = result.scalars().first()
+
+        if not file:
+            raise HTTPException(status_code=404, detail="File not found")
+
+        # Dekod filens indhold til string
+        try:
+            file_content = file.content.decode("utf-8")  # Hvis filen er tekstbaseret
+        except UnicodeDecodeError:
+            raise HTTPException(status_code=400, detail="File is not a valid UTF-8 text file")
+
+        return FileResponse(file_id=file.file_id, file_name=file.file_name, content=file_content)

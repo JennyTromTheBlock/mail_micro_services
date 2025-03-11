@@ -10,7 +10,6 @@ services:
     networks:
       - enron_network
 
-
   frontend:
     build: ./frontend_search
     ports:
