@@ -13,4 +13,4 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY . .
 
 # Step 5: Start FastAPI-serveren med Uvicorn
-CMD sleep 15 && uvicorn main:app --host 0.0.0.0 --port 8001
+CMD sleep 25 && uvicorn main:app --host 0.0.0.0 --port 8001

@@ -1,6 +1,19 @@
+# FastAPI framework
 fastapi
+
+# ASGI server for FastAPI
 uvicorn
+
+# For RabbitMQ integration
 pika
+
+
+# OpenTelemetry for tracing and metrics
+opentelemetry-api
+opentelemetry-sdk
+opentelemetry-instrumentation-fastapi
+opentelemetry-exporter-otlp
+
 python-dotenv
 sqlalchemy
 sqlmodel
