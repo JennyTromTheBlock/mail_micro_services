@@ -75,21 +75,23 @@ services:
 
   indexer:
     build: ./indexer
-    container_name: indexer
+    deploy:
+      replicas: 2
     depends_on:
-      - mariadb  # Sørger for at mariadb containeren starter før indexer
+      - mariadb
     networks:
       - enron_network
-    ports:
-      - "8002:8000"  # Exponer API’en på port 8000
     environment:
-      - DATABASE_URL=mysql+aiomysql://myuser:mypassword@mariadb_container:3306/WordOccurrencesDB
+      - DATABASE_URL=mysql+aiomysql://myuser:mypassword@mariadb:3306/WordOccurrencesDB
     healthcheck:
       test: [ "CMD", "curl", "--fail", "http://localhost:8000/health" ]
       interval: 30s
       timeout: 10s
       retries: 3
       # Hvis du har brug for at tilføje flere miljøvariabler, gør det her
+
+
+
 
 
   searcher:
