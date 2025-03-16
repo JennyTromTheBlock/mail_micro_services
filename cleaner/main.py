@@ -6,6 +6,7 @@ import re
 import threading
 from fastapi import FastAPI
 
+
 # Konfiguration
 RABBITMQ_HOST = "rabbitmq"
 RABBITMQ_QUEUE = "file_paths"
