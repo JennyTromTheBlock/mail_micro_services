@@ -53,7 +53,7 @@ services:
 
   mariadb:
     image: mariadb:latest
-    container_name: mariadb_container
+    container_name: mariadb_container1
     restart: always
     environment:
       MYSQL_ROOT_PASSWORD: rootpassword
@@ -70,16 +70,14 @@ services:
 
   indexer:
     build: ./indexer
-    container_name: indexer
+    deploy:
+      replicas: 2
     depends_on:
-      - mariadb  # Sørger for at mariadb containeren starter før indexer
+      - mariadb
     networks:
       - enron_network
-    ports:
-      - "8002:8000"  # Exponer API’en på port 8000
     environment:
-      - DATABASE_URL=mysql+aiomysql://myuser:mypassword@mariadb_container:3306/WordOccurrencesDB
-      # Hvis du har brug for at tilføje flere miljøvariabler, gør det her
+      - DATABASE_URL=mysql+aiomysql://myuser:mypassword@mariadb:3306/WordOccurrencesDB
 
   searcher:
       build: ./searcher
