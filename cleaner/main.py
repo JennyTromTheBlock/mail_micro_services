@@ -18,15 +18,26 @@ app = FastAPI()
 rabbitmq_channel = None
 
 # Opret og gem RabbitMQ-forbindelsen og kanalen
-def get_rabbitmq_connection():
+def get_rabbitmq_connection(retries=5, base_delay=2):
     global rabbitmq_channel
     if rabbitmq_channel is None:
-        # Opret forbindelse og kanal én gang
-        connection = pika.BlockingConnection(pika.ConnectionParameters(host=RABBITMQ_HOST))
-        rabbitmq_channel = connection.channel()
-        rabbitmq_channel.queue_declare(queue=RABBITMQ_QUEUE)
-        rabbitmq_channel.queue_declare(queue=RABBITMQ_CLEANED_QUEUE)  # Sørg for at den nye kø eksisterer
-        print("RabbitMQ forbindelse oprettet og kanal oprettet.")
+        for attempt in range(retries):
+            try:
+                connection = pika.BlockingConnection(
+                    pika.ConnectionParameters(host=RABBITMQ_HOST)
+                )
+                rabbitmq_channel = connection.channel()
+                rabbitmq_channel.queue_declare(queue=RABBITMQ_QUEUE, durable=True)
+                rabbitmq_channel.queue_declare(queue=RABBITMQ_CLEANED_QUEUE, durable=True)
+                print("RabbitMQ connection established and channel created.")
+                return rabbitmq_channel
+            except pika.exceptions.AMQPConnectionError as e:
+                wait_time = base_delay ** attempt
+                print(f"RabbitMQ connection failed: {e}. Retrying in {wait_time} seconds...")
+                time.sleep(wait_time)
+
+        raise Exception("Failed to connect to RabbitMQ after multiple retries.")
+
     return rabbitmq_channel
 
 
@@ -72,7 +83,8 @@ def callback(ch, method, properties, body):
         ch.basic_publish(
             exchange='',
             routing_key=RABBITMQ_CLEANED_QUEUE,
-            body=json.dumps(message)  # Send kun den rensede e-mail (uden sti)
+            body=json.dumps(message),  # Send kun den rensede e-mail (uden sti)
+            properties=pika.BasicProperties(delivery_mode=2)
         )
     # Bekræft modtagelse af beskeden
     ch.basic_ack(delivery_tag=method.delivery_tag)
@@ -96,3 +108,15 @@ def startup_event():
     thread = threading.Thread(target=listen_for_paths)
     thread.daemon = True  # Gør tråden til en daemon, så den afsluttes når serveren stopper
     thread.start()
+
+@app.get("/health")
+async def health_check():
+    """Health check endpoint for RabbitMQ."""
+    # Check RabbitMQ connection
+    try:
+        channel = get_rabbitmq_connection()
+        channel.close()
+    except Exception as e:
+        return {"status": "unhealthy", "rabbitmq": "down", "error": str(e)}
+
+    return {"status": "healthy"}
