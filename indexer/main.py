@@ -8,7 +8,9 @@ from sqlmodel import Field, SQLModel, create_engine, select
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.orm import sessionmaker
 from dotenv import load_dotenv
+from tenacity import retry, stop_after_attempt, wait_exponential
 import pika
+import time
 import concurrent.futures
 
 # Load environment variables from .env file
