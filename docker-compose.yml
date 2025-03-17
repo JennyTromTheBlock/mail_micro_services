@@ -10,6 +10,50 @@ services:
     networks:
       - enron_network
 
+
+  # Zipkin service (microservice for tracing)
+  zipkin:
+    image: openzipkin/zipkin:latest
+    container_name: zipkin
+    environment:
+      - ZIPKIN_HTTP_PORT=9411
+    ports:
+      - "9411:9411"  # Zipkin UI og API
+    networks:
+      - enron_network
+    restart: always
+
+  # Seq service (log-metrics exporter)
+  seq:
+    image: datalust/seq
+    container_name: seq
+    environment:
+      - ACCEPT_EULA=Y
+    ports:
+      - "5341:80"  # Web UI og API
+    networks:
+      - enron_network
+
+
+  # OpenTelemetry Collector service
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:latest
+    container_name: otel-collector
+    volumes:
+      - ./otel-collector/otel-collector-config.yaml:/etc/otel/config.yaml  # Indlæs OpenTelemetry Collector konfiguration
+    ports:
+      - "4317:4317" # OTLP gRPC
+      - "4318:4318" # OTLP HTTP
+    networks:
+      - enron_network
+    environment:
+      - COLLECTOR_ZIPKIN_ENDPOINT=http://zipkin:9411/api/v2/spans
+      - COLLECTOR_SEQ_ENDPOINT=http://seq:5341
+      - LOGGING_LEVEL=debug
+    depends_on:
+      - zipkin
+      - seq
+
   frontend:
     build: ./frontend_search
     ports:
@@ -53,7 +97,7 @@ services:
 
   mariadb:
     image: mariadb:latest
-    container_name: mariadb_container
+    container_name: mariadb_container1
     restart: always
     environment:
       MYSQL_ROOT_PASSWORD: rootpassword
@@ -78,7 +122,7 @@ services:
     ports:
       - "8002:8000"  # Exponer API’en på port 8000
     environment:
-      - DATABASE_URL=mysql+aiomysql://myuser:mypassword@mariadb_container:3306/WordOccurrencesDB
+      - DATABASE_URL=mysql+aiomysql://myuser:mypassword@mariadb_container1:3306/WordOccurrencesDB
       # Hvis du har brug for at tilføje flere miljøvariabler, gør det her
 
   searcher:
@@ -91,49 +135,7 @@ services:
       ports:
         - "8003:8002"  # Exponer API’en på port 8000
       environment:
-        - DATABASE_URL=mysql+aiomysql://myuser:mypassword@mariadb_container:3306/WordOccurrencesDB
-
-    # OpenTelemetry Collector service
-    # OpenTelemetry Collector service
-  otel-collector:
-    image: otel/opentelemetry-collector-contrib:latest
-    container_name: otel-collector
-    volumes:
-      - ./otel-collector/otel-collector-config.yaml:/etc/otel/config.yaml  # Indlæs OpenTelemetry Collector konfiguration
-    ports:
-      - "4317:4317" # OTLP gRPC
-      - "4318:4318" # OTLP HTTP
-    networks:
-      - enron_network
-    environment:
-      - COLLECTOR_ZIPKIN_ENDPOINT=http://zipkin:9411/api/v2/spans
-      - COLLECTOR_SEQ_ENDPOINT=http://seq:5341
-      - LOGGING_LEVEL=debug
-
-
-  # Zipkin service (microservice for tracing)
-  zipkin:
-    image: openzipkin/zipkin:latest
-    container_name: zipkin
-    environment:
-      - ZIPKIN_HTTP_PORT=9411
-    ports:
-      - "9411:9411"  # Zipkin UI og API
-    networks:
-      - enron_network
-    restart: always
-
-  # Seq service (log-metrics exporter)
-  seq:
-    image: datalust/seq
-    container_name: seq
-    environment:
-      - ACCEPT_EULA=Y
-    ports:
-      - "5341:80"  # Web UI og API
-    networks:
-      - enron_network
-
+        - DATABASE_URL=mysql+aiomysql://myuser:mypassword@mariadb_container1:3306/WordOccurrencesDB
 
 
 networks:

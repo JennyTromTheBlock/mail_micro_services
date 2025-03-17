@@ -19,7 +19,7 @@ RABBITMQ_HOST = "rabbitmq"
 RABBITMQ_QUEUE = "cleaned_file"  # New queue for cleaned files
 
 # Database URL (use your MariaDB credentials here)
-DATABASE_URL = "mysql+aiomysql://myuser:mypassword@mariadb_container:3306/WordOccurrencesDB"
+DATABASE_URL = "mysql+aiomysql://myuser:mypassword@mariadb_container1:3306/WordOccurrencesDB"
 
 # FastAPI app initialization
 app = FastAPI()

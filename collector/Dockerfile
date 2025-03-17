@@ -12,5 +12,5 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY . .
 
 # Vent 10 sekunder før start
-CMD sleep 25
+CMD sleep 40
 CMD uvicorn main:app --host 0.0.0.0 --port 8000
