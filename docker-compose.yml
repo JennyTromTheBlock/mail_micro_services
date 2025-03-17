@@ -102,7 +102,7 @@ services:
 
   mariadb:
     image: mariadb:latest
-    container_name: mariadb_container
+    container_name: mariadb_container1
     restart: always
     environment:
       MYSQL_ROOT_PASSWORD: rootpassword
