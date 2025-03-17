@@ -79,6 +79,11 @@ services:
       - "8000:8000"  # Exponer API’en på port 8001
     networks:
       - enron_network
+    healthcheck:
+      test: [ "CMD", "curl", "--fail", "http://localhost:8000/health" ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
 
   cleaner:
     build: ./cleaner
@@ -122,6 +127,16 @@ services:
       - enron_network
     environment:
       - DATABASE_URL=mysql+aiomysql://myuser:mypassword@mariadb_container1:3306/WordOccurrencesDB
+    healthcheck:
+      test: [ "CMD", "curl", "--fail", "http://localhost:8000/health" ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      # Hvis du har brug for at tilføje flere miljøvariabler, gør det her
+
+
+
+
 
   searcher:
       build: ./searcher

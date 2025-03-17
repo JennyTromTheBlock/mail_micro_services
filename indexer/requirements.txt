@@ -20,3 +20,4 @@ opentelemetry-instrumentation-logging
 sqlalchemy
 sqlmodel
 aiomysql
+tenacity
