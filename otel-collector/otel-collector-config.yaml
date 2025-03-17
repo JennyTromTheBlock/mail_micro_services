@@ -2,25 +2,19 @@ receivers:
   otlp:
     protocols:
       grpc:
-        endpoint: "0.0.0.0:4317"
       http:
-        endpoint: "0.0.0.0:4318"
-
 
 exporters:
-  zipkin:
-    endpoint: "http://zipkin:9411/api/v2/spans"
   logging:
-    verbosity: detailed
-  seq:
+  otlp:
     endpoint: "http://seq:5341"
+    insecure: true
 
 service:
   pipelines:
     traces:
       receivers: [otlp]
-      exporters: [zipkin, logging]
-
+      exporters: [otlp]
     logs:
       receivers: [otlp]
-      exporters: [otlphttp/seq, logging]
+      exporters: [otlp]
